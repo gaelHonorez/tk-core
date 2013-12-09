@@ -24,6 +24,8 @@ from ..errors import TankError, TankEngineInitError
 from ..deploy import descriptor
 from ..deploy.dev_descriptor import TankDevDescriptor
 
+from ..util import shotgun
+
 from . import application
 from . import constants
 from . import validation
@@ -994,8 +996,27 @@ def start_shotgun_engine(tk, entity_type, context=None):
 
     # bypass the get_environment hook and use a fixed set of environments
     # for this shotgun engine. This is required because of the action caching.
-    env = tk.pipeline_configuration.get_environment("shotgun_%s" % entity_type.lower(), context)
-
+    #
+    
+    # first, look for an environment matching the entity display name:
+    env = None
+    entity_type_display_name = shotgun.get_entity_type_display_name(tk, entity_type)
+    env_name_a = "shotgun_%s" % entity_type_display_name.lower()
+    try:
+        env = tk.pipeline_configuration.get_environment(env_name_a, context)
+    except TankError, e:
+        # that failed so lets look for an environment matching the entity type itself:
+        env_name_b = "shotgun_%s" % entity_type.lower()
+        if env_name_b != env_name_a:
+            try:
+                env = tk.pipeline_configuration.get_environment(env_name_b, context)
+            except TankError:
+                # That also failed so raise the original exception
+                raise e
+        else:
+            # re-raise the exception:
+            raise
+    
     # get the location for our engine
     if not constants.SHOTGUN_ENGINE_NAME in env.get_engines():
         raise TankEngineInitError("Cannot find a shotgun engine in %s. Please contact support." % env)
